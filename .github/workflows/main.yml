@@ -1,0 +1,149 @@
+name: Build Mini Cab APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Create Android project
+        run: |
+          mkdir -p app/src/main/java/com/minicab/receipt
+          mkdir -p app/src/main/assets
+
+          cp index.html app/src/main/assets/index.html
+          cp logo.png app/src/main/assets/logo.png
+          cp qr.png app/src/main/assets/qr.png
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "MiniCabReceiptApp"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.minicab.receipt'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.minicab.receipt'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="Mini Cab Receipt">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+
+                  </activity>
+
+              </application>
+
+          </manifest>
+          EOF
+
+          mkdir -p app/src/main/res/values
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#1565C0</item>
+                  <item name="android:navigationBarColor">#FFFFFF</item>
+                  <item name="android:statusBarColor">#FFFFFF</item>
+                  <item name="android:windowLightStatusBar">true</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/java/com/minicab/receipt/MainActivity.java <<'EOF'
+          package com.minicab.receipt;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+
+          public class MainActivity extends Activity {
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  WebView webView = new WebView(this);
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+
+                  webView.loadUrl("file:///android_asset/index.html");
+                  setContentView(webView);
+              }
+          }
+          EOF
+
+      - name: Build APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiniCabReceiptApp-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
